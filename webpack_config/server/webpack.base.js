@@ -4,45 +4,45 @@ import webpack from 'webpack'
 import rimraf from 'rimraf'
 import config from '../config'
 import isomorphicWebpackConfig from '../webpack.isomorphic'
-import _ from 'lodash'
-import I18nPlugin from 'i18n-webpack-plugin'
+const {SENTRY_DSN, CLIENT_DIST_PATH, JWT_SECRET, PORT, isProduction} = config
 
-const {
-	SENTRY_DSN,
-	DIST_PATH,
-	APP_LANGUAGE,
-	JWT_SECRET,
-	ANALYZE_BUNDLE,
-	PORT
-} = config
-
-// Cleare dist dir before run
-rimraf(`${config.distPath}/server/${APP_LANGUAGE}`, {}, () => {})
+// Clear dist dir before run
+rimraf(`${config.distPath}/server`, {}, () => {})
 
 const definePluginArgs = {
 	'process.env.BROWSER': JSON.stringify(false),
 	'process.env.PORT': JSON.stringify(PORT),
 	'process.env.JWT_SECRET': JSON.stringify(JWT_SECRET),
 	'process.env.SENTRY_DSN': JSON.stringify(SENTRY_DSN),
-	'process.env.DIST_PATH': JSON.stringify(DIST_PATH)
+	'process.env.CLIENT_DIST_PATH': JSON.stringify(CLIENT_DIST_PATH)
 }
+
+const devtool = isProduction ? 'cheap-source-map' : 'eval'
+const chunkFilename = isProduction ? '[name].[chunkhash:6].js' : '[name].js'
+const entry = isProduction
+	? path.join(config.srcPath, './server')
+	: path.join(config.srcPath, './server/server')
 
 let nodeModules = {}
 fs
 	.readdirSync('node_modules')
-	.filter(function (x) {
+	.filter(x => {
 		return ['.bin'].indexOf(x) === -1
 	})
-	.forEach(function (mod) {
+	.forEach(mod => {
 		nodeModules[mod] = 'commonjs ' + mod
 	})
 
 const baseWebpackConfig = {
-	entry: [path.join(config.srcPath, './server/index')],
+	name: 'server',
+	entry,
+	devtool,
 	target: 'node',
 	output: {
-		path: path.join(config.distPath, './server', APP_LANGUAGE),
-		filename: 'index.js'
+		path: path.join(config.distPath, './server'),
+		filename: 'index.js',
+		chunkFilename,
+		libraryTarget: 'commonjs2'
 	},
 	externals: nodeModules,
 	performance: {
@@ -51,7 +51,10 @@ const baseWebpackConfig = {
 	resolve: {
 		extensions: isomorphicWebpackConfig.resolve.extensions,
 		modules: isomorphicWebpackConfig.resolve.modules,
-		alias: isomorphicWebpackConfig.resolve.alias
+		alias: {
+			...isomorphicWebpackConfig.resolve.alias,
+			locals: `${config.rootPath}/locals`
+		}
 	},
 	module: {
 		rules: isomorphicWebpackConfig.module.rules.concat([
@@ -70,19 +73,6 @@ const baseWebpackConfig = {
 			//     }
 			//   ]
 			// }
-			{
-				test: /\.(jpe?g|png|gif|svg)$/,
-				use: [
-					{
-						loader: 'url-loader',
-						options: {
-							limit: 25000,
-							name: 'images/[name].[hash:8].[ext]'
-						}
-					},
-					'img-loader'
-				]
-			}
 		])
 	},
 	plugins: isomorphicWebpackConfig.plugins.concat([
